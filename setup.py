@@ -10,11 +10,17 @@ version = re.search(
     '^__version__\s*=\s*"(.*)"',
     open('linkedin_scraper/__init__.py').read(),
     re.M
-    ).group(1)
+).group(1)
 
 # Get the long description from the README file
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
+
+requirements = [
+    req.strip()
+    for req in open("requirements.txt")
+    if req.strip() and not req.startswith("#")
+]
 
 setup( 
     name = 'linkedin_scraper', 
@@ -25,10 +31,10 @@ setup(
     long_description_content_type='text/markdown',
     author = 'Joey Sham', 
     author_email = 'sham.joey@gmail.com', 
-    url = 'https://github.com/joeyism/linkedin_scraper', # use the URL to the github repo 
-    download_url = 'https://github.com/joeyism/linkedin_scraper/dist/' + version + '.tar.gz', 
-    keywords = ['linkedin', 'scraping', 'scraper'],
+    url = 'https://github.com/nearavenac/linkedin_scraper', # use the URL to the github repo 
+    # download_url = 'https://github.com/nearavenac/linkedin_scraper/dist/' + version + '.tar.gz', 
+    keywords = ['linkedin', 'scraping', 'scraper'], 
     classifiers = [], 
-    install_requires=[package.split("\n")[0] for package in open("requirements.txt", "r").readlines()]
+    install_requires = requirements,
 )
 
