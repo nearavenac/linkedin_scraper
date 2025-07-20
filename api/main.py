@@ -12,7 +12,6 @@ app = FastAPI()
 CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH")
 LINKEDIN_USER = os.getenv("LINKEDIN_USER")
 LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD")
-LINKEDIN_COOKIE = os.getenv("LINKEDIN_COOKIE")
 
 def get_driver():
     chrome_options = Options()
@@ -27,8 +26,7 @@ def scrape_person(profile_url: str = Query(..., description="LinkedIn profile UR
 
     driver = get_driver()
     try:
-        # actions.login(driver, LINKEDIN_USER, LINKEDIN_PASSWORD)
-        actions._login_with_cookie(driver, LINKEDIN_COOKIE)
+        actions.login(driver, LINKEDIN_USER, LINKEDIN_PASSWORD)
         person = Person(profile_url, driver=driver)
         return person.to_dict()
     except Exception as e:
