@@ -1,11 +1,11 @@
 import requests
+import os
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException
 from .objects import Experience, Education, Scraper, Interest, Accomplishment, Contact
-import os
 from linkedin_scraper import selectors
 
 
@@ -84,6 +84,12 @@ class Person(Scraper):
 
     def add_contact(self, contact):
         self.contacts.append(contact)
+
+    def to_dict(self):
+        d = self.__dict__.copy()
+        d.pop("driver", None)
+        return d
+
 
     def scrape(self, close_on_complete=True):
         if self.is_signed_in():

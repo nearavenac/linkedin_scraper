@@ -1,16 +1,28 @@
 import json
 
 def obj_to_dict(obj):
-    # Si el objeto tiene .to_dict(), úsalo
+    exclude_words = ["driver", "lock"]
     if hasattr(obj, "to_dict"):
         return obj.to_dict()
-    # Si el objeto tiene __dict__ (es normal en clases simples)
-    elif hasattr(obj, "__dict__"):
-        return vars(obj)
-    # Si es una lista, procesa cada elemento
     elif isinstance(obj, list):
         return [obj_to_dict(item) for item in obj]
-    # Si es un tipo nativo, devuélvelo directo
+    elif isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            # Excluye keys que contienen palabras excluidas
+            if any(word in k for word in exclude_words) or k.startswith("_"):
+                print(f"Excluyendo atributo/clave: {k}")
+                continue
+            out[k] = obj_to_dict(v)
+        return out
+    elif hasattr(obj, "__dict__"):
+        out = {}
+        for k, v in vars(obj).items():
+            if any(word in k for word in exclude_words) or k.startswith("_"):
+                print(f"Excluyendo atributo/clave: {k}")
+                continue
+            out[k] = obj_to_dict(v)
+        return out
     else:
         return obj
         

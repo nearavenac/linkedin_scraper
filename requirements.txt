@@ -2,3 +2,6 @@ selenium
 requests
 lxml
 python-dotenv
+fastapi
+uvicorn[standard]
+gunicorn
