@@ -16,13 +16,6 @@ class Person(Scraper):
     def __init__(
         self,
         linkedin_url=None,
-        name=None,
-        about=None,
-        experiences=None,
-        educations=None,
-        interests=None,
-        accomplishments=None,
-        contacts=None,
         driver=None,
         get=True,
         scrape=True,
@@ -30,14 +23,15 @@ class Person(Scraper):
         extra_info=False,
     ):
         self.linkedin_url = linkedin_url
-        self.name = name
-        self.about = about or []
-        self.experiences = experiences or []
-        self.educations = educations or []
-        self.interests = interests or []
-        self.accomplishments = accomplishments or []
+        self.name = ""
+        self.about = []
+        self.experiences = []
+        self.educations = []
+        self.interests = []
+        self.accomplishments = []
+        self.skills = []
         self.also_viewed_urls = []
-        self.contacts = contacts or []
+        self.contacts = []
         self.extra_info = extra_info
         
         if driver is None:
@@ -76,6 +70,9 @@ class Person(Scraper):
     def add_accomplishment(self, accomplishment):
         self.accomplishments.append(accomplishment)
 
+    def add_skill(self, skill):
+        self.skills.append(skill)
+
     def add_location(self, location):
         self.location = location
 
@@ -85,8 +82,15 @@ class Person(Scraper):
     def to_dict(self):
         d = self.__dict__.copy()
         d.pop("driver", None)
+        # Serializar listas de objetos personalizados
+        for key in ["experiences", "educations", "interests", "accomplishments", "contacts"]:
+            val = d.get(key)
+            if isinstance(val, list):
+                d[key] = [
+                    obj.to_dict() if hasattr(obj, "to_dict") else obj.__dict__
+                    for obj in val
+                ]
         return d
-
 
     def scrape(self, close_on_complete=True):
         if self.is_signed_in():
@@ -410,6 +414,26 @@ class Person(Scraper):
         except:
             connections = None
 
+    def get_skills(self):
+        scraped_skill_keys = set()
+        url = os.path.join(self.linkedin_url, "details/skills")
+        self.driver.get(url)
+        self.focus()
+        main = self.wait_for_element_to_load(by=By.TAG_NAME, name="main")
+        self.scroll_to_half()
+        self.scroll_to_bottom()
+        main_list = self.wait_for_element_to_load(name="pvs-list__container", base=main)
+        
+        for skill_item in main_list.find_elements(By.CLASS_NAME, "pvs-list__paged-list-item"):
+            try:
+                entity = skill_item.find_element(By.CSS_SELECTOR, "div[data-view-name='profile-component-entity']")
+                span = entity.find_element(By.CSS_SELECTOR, ".t-bold span[aria-hidden='true']")
+                skill_name = span.text.strip()
+                if skill_name and skill_name not in scraped_skill_keys:
+                    self.add_skill(skill_name)
+                    scraped_skill_keys.add(skill_name)
+            except Exception as e:
+                continue
 
     def scrape_logged_in(self, close_on_complete=True):
         driver = self.driver
@@ -441,6 +465,8 @@ class Person(Scraper):
         self.get_experiences()
 
         self.get_educations()
+
+        self.get_skills()
 
         if self.extra_info:
             self.get_contacts()

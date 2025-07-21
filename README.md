@@ -275,6 +275,68 @@ company = Company("https://ca.linkedin.com/company/google", driver=driver)
 #### `scrape(close_on_complete=True)`
 This is the meat of the code, where execution of this function scrapes the company. If *close_on_complete* is True (which it is by default), then the browser will close upon completion. If scraping of other companies are desired, then you might want to set that to false so you can keep using the same driver.
 
+## API REST
+
+Este proyecto incluye una API REST con FastAPI para consumir los datos de LinkedIn de forma programática.
+
+### Configuración del entorno
+
+Crea un archivo `.env` en la raíz del proyecto con las siguientes variables:
+
+```
+CHROMEDRIVER_PATH=/ruta/al/chromedriver
+LINKEDIN_USER=tu_email_linkedin
+LINKEDIN_PASSWORD=tu_contraseña_linkedin
+```
+
+### Cookies
+
+Las cookies de sesión se gestionan automáticamente y se almacenan en el archivo `cookies.json` por usuario. El sistema intentará iniciar sesión usando la cookie guardada para mayor rendimiento. Si la cookie expira, se realiza login con usuario y contraseña y se actualiza la cookie.
+
+### Uso de la API
+
+Ejecuta el servidor FastAPI:
+
+```bash
+uvicorn api.main:app --reload
+```
+
+#### Endpoints principales
+
+- **/refresh_linkedin_cookie**: Fuerza la actualización de la cookie de sesión de LinkedIn.
+- **/scrape_person?profile_url=URL**: Devuelve los datos públicos de un perfil de LinkedIn en formato JSON, junto con el tiempo de respuesta.
+
+Ejemplo de respuesta:
+```json
+{
+  "status": 200,
+  "data": {
+    "linkedin_url": "...",
+    "name": "...",
+    "about": "...",
+    "experiences": [...],
+    "educations": [...]
+    // ...otros campos
+  },
+  "elapsed": 1.23
+}
+```
+
+### Ejemplo de consumo desde Python
+
+```python
+import requests
+resp = requests.get("http://localhost:8000/scrape_person", params={"profile_url": "https://www.linkedin.com/in/usuario/"})
+data = resp.json()
+print(data)
+```
+
+### Notas
+- El login y scraping se realiza en modo headless por defecto.
+- El scraping es más rápido si la cookie está vigente.
+- El endpoint `/scrape_person` solo requiere la URL del perfil.
+- Si necesitas datos extendidos (intereses, logros, contactos), puedes modificar el parámetro `extra_info` en la clase `Person`.
+
 ## Contribution
 
 <a href="https://www.buymeacoffee.com/joeyism" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>

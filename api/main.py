@@ -1,6 +1,8 @@
 import os
+import time
+import json
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Response
 from linkedin_scraper import Person, actions, utils
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -36,11 +38,22 @@ def scrape_person(profile_url: str = Query(..., description="LinkedIn profile UR
     if not CHROMEDRIVER_PATH or not LINKEDIN_USER or not LINKEDIN_PASSWORD:
         raise HTTPException(status_code=500, detail="Environment variables not configured")
 
+    start_time = time.time()
     driver = get_driver()
     try:
         actions.login(driver, LINKEDIN_USER, LINKEDIN_PASSWORD)
         person = Person(profile_url, driver=driver)
-        return person.to_dict()
+        elapsed = time.time() - start_time
+        result = person.to_dict()
+        return Response(
+            content=json.dumps({
+                "status": 200,
+                "data": result,
+                "elapsed": elapsed
+            }),
+            media_type="application/json",
+            status_code=200
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
