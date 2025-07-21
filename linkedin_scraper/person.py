@@ -7,7 +7,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException
 from .objects import Experience, Education, Scraper, Interest, Accomplishment, Contact
 from linkedin_scraper import selectors
-
+from linkedin_scraper import utils
 
 class Person(Scraper):
 
@@ -35,20 +35,12 @@ class Person(Scraper):
         self.about = about or []
         self.experiences = experiences or []
         self.educations = educations or []
-        self.scraped_education_keys = set()
-
-        # El resto de información solo se obtiene si extra_info=True
-        if extra_info:
-            self.interests = interests or []
-            self.accomplishments = accomplishments or []
-            self.also_viewed_urls = []
-            self.contacts = contacts or []
-        else:
-            self.interests = False
-            self.accomplishments = False
-            self.also_viewed_urls = False
-            self.contacts = False
-
+        self.interests = interests or []
+        self.accomplishments = accomplishments or []
+        self.also_viewed_urls = []
+        self.contacts = contacts or []
+        self.extra_info = extra_info
+        
         if driver is None:
             try:
                 if os.getenv("CHROMEDRIVER") == None:
@@ -121,12 +113,15 @@ class Person(Scraper):
 
     def get_experiences(self):
         url = os.path.join(self.linkedin_url, "details/experience")
+        scraped_experience_keys = set()
+
         self.driver.get(url)
         self.focus()
         main = self.wait_for_element_to_load(by=By.TAG_NAME, name="main")
         self.scroll_to_half()
         self.scroll_to_bottom()
         main_list = self.wait_for_element_to_load(name="pvs-list__container", base=main)
+        
         for position in main_list.find_elements(By.CLASS_NAME, "pvs-list__paged-list-item"):
             position = position.find_element(By.CSS_SELECTOR, "div[data-view-name='profile-component-entity']")
             
@@ -186,76 +181,100 @@ class Person(Scraper):
             from_date = " ".join(times.split(" ")[:2]) if times else ""
             to_date = " ".join(times.split(" ")[3:]) if times and len(times.split(" ")) > 3 else ""
             
-            if position_summary_text and any(element.get_attribute("class") == "pvs-list__container" for element in position_summary_text.find_elements(By.XPATH, "*")):
+            if position_summary_text:
                 try:
-                    inner_positions = (position_summary_text.find_element(By.CLASS_NAME,"pvs-list__container")
-                                    .find_element(By.XPATH,"*").find_element(By.XPATH,"*").find_element(By.XPATH,"*")
-                                    .find_elements(By.CLASS_NAME,"pvs-list__paged-list-item"))
-                except NoSuchElementException:
+                    ul = position_summary_text.find_element(By.TAG_NAME, "ul")
+                    inner_positions = ul.find_elements(By.TAG_NAME, "li")
+                    # Solo considerar inner_positions si alguno tiene al menos un .t-bold (cargo)
+                    filtered_inner_positions = []
+                    for li in inner_positions:
+                        # Aquí puede variar el selector según el HTML de tu LinkedIn
+                        if li.find_elements(By.CSS_SELECTOR, ".t-bold"):
+                            filtered_inner_positions.append(li)
+                    inner_positions = filtered_inner_positions
+                except Exception:
                     inner_positions = []
             else:
                 inner_positions = []
-            
-            if len(inner_positions) > 1:
-                descriptions = inner_positions
-                for description in descriptions:
+
+            if inner_positions:
+                for pos in inner_positions:
                     try:
-                        res = description.find_element(By.TAG_NAME,"a").find_elements(By.XPATH,"*")
-                        position_title_elem = res[0] if len(res) > 0 else None
-                        work_times_elem = res[1] if len(res) > 1 else None
-                        location_elem = res[2] if len(res) > 2 else None
+                        anchors = pos.find_elements(By.TAG_NAME, "a")
+                        if not anchors:
+                            print("No anchor found in this li, skipping...")
+                            continue
+                        anchor = anchors[0]
 
-                        location = location_elem.find_element(By.XPATH,"*").text if location_elem else None
-                        position_title = position_title_elem.find_element(By.XPATH,"*").find_element(By.TAG_NAME,"*").text if position_title_elem else ""
-                        work_times = work_times_elem.find_element(By.XPATH,"*").text if work_times_elem else ""
+                        # Title
+                        try:
+                            position_title = anchor.find_element(By.CSS_SELECTOR, ".t-bold span[aria-hidden='true']").text
+                        except Exception:
+                            position_title = ""
+                        # Work times & duration
+                        try:
+                            date_block = anchor.find_element(By.CSS_SELECTOR, ".pvs-entity__caption-wrapper[aria-hidden='true']").text
+                            date_parts = date_block.split("·")
+                            date_range = date_parts[0].strip()
+                            duration = date_parts[1].strip() if len(date_parts) > 1 else None
+                            if '-' in date_range:
+                                from_str, to_str = [d.strip() for d in date_range.split('-')]
+                            else:
+                                from_str, to_str = date_range.strip(), None
+                            from_date = utils.parse_date(from_str)
+                            to_date = utils.parse_date(to_str) if to_str else None
+                        except Exception:
+                            from_date, to_date, duration = None, None, None
                         
-                        if work_times:
-                            parts = work_times.split("·")
-                            times = parts[0].strip() if parts else ""
-                            duration = parts[1].strip() if len(parts) > 1 else None
-                        else:
-                            times = ""
-                            duration = None
-                            
-                        from_date = " ".join(times.split(" ")[:2]) if times else ""
-                        to_date = " ".join(times.split(" ")[3:]) if times and len(times.split(" ")) > 3 else ""
+                        location = ""
+                        description = anchor.text
 
-                        experience = Experience(
-                            position_title=position_title,
-                            from_date=from_date,
-                            to_date=to_date,
-                            duration=duration,
-                            location=location,
-                            description=description,
-                            institution_name=company,
-                            linkedin_url=company_linkedin_url
-                        )
-                        self.add_experience(experience)
-                    except (NoSuchElementException, IndexError) as e:
+                        experience_key = (position_title, company, from_str, to_str)
+                        if experience_key not in scraped_experience_keys:
+                            experience = Experience(
+                                position_title=position_title,
+                                from_date=from_date,
+                                to_date=to_date,
+                                duration=duration,
+                                location=location,
+                                description=description,
+                                institution_name=company,
+                                linkedin_url=company_linkedin_url
+                            )
+                            self.add_experience(experience)
+                            scraped_experience_keys.add(experience_key)
+                    except Exception as e:
+                        print(f"Error processing position: {e}")
                         continue
             else:
                 description = position_summary_text.text if position_summary_text else ""
 
-                experience = Experience(
-                    position_title=position_title,
-                    from_date=from_date,
-                    to_date=to_date,
-                    duration=duration,
-                    location=location,
-                    description=description,
-                    institution_name=company,
-                    linkedin_url=company_linkedin_url
-                )
-                self.add_experience(experience)
+                experience_key = (position_title, company, from_date, to_date)
+                if experience_key not in scraped_experience_keys:
+                    experience = Experience(
+                        position_title=position_title,
+                        from_date=utils.parse_date(from_date),
+                        to_date=utils.parse_date(to_date),
+                        duration=duration,
+                        location=location,
+                        description=description,
+                        institution_name=company,
+                        linkedin_url=company_linkedin_url
+                    )
+                    self.add_experience(experience)
+                    scraped_experience_keys.add(experience_key)
 
     def get_educations(self):
         url = os.path.join(self.linkedin_url, "details/education")
+        scraped_education_keys = set()
+
         self.driver.get(url)
         self.focus()
         main = self.wait_for_element_to_load(by=By.TAG_NAME, name="main")
         self.scroll_to_half()
         self.scroll_to_bottom()
         main_list = self.wait_for_element_to_load(name="pvs-list__container", base=main)
+        
         for position in main_list.find_elements(By.CLASS_NAME,"pvs-list__paged-list-item"):
             try:
                 position = position.find_element(By.CSS_SELECTOR, "div[data-view-name='profile-component-entity']")
@@ -298,18 +317,17 @@ class Person(Scraper):
                 description = position_details_list[1].text if len(position_details_list) > 1 else ""
 
                 education_key = (institution_name, degree, from_date, to_date)
-
-                if education_key not in self.scraped_education_keys:
+                if education_key not in scraped_education_keys:
                     education = Education(
-                        from_date=from_date,
-                        to_date=to_date,
+                        from_date=utils.parse_date(from_date),
+                        to_date=utils.parse_date(to_date),
                         description=description,
                         degree=degree,
                         institution_name=institution_name,
                         linkedin_url=institution_linkedin_url
                     )
                     self.add_education(education)
-                    self.scraped_education_keys.add(education_key)
+                    scraped_education_keys.add(education_key)
                     
             except (NoSuchElementException, IndexError) as e:
                 continue
@@ -325,6 +343,74 @@ class Person(Scraper):
         except NoSuchElementException :
             about=None
         self.about = about
+
+    def get_interests(self):
+        try:
+            _ = WebDriverWait(self.driver, self.__WAIT_FOR_ELEMENT_TIMEOUT).until(
+                EC.presence_of_element_located(
+                    (
+                        By.XPATH,
+                        "//*[@class='pv-profile-section pv-interests-section artdeco-container-card artdeco-card ember-view']",
+                    )
+                )
+            )
+            interestContainer = self.driver.find_element(By.XPATH,
+                "//*[@class='pv-profile-section pv-interests-section artdeco-container-card artdeco-card ember-view']"
+            )
+            for interestElement in interestContainer.find_elements(By.XPATH,
+                "//*[@class='pv-interest-entity pv-profile-section__card-item ember-view']"
+            ):
+                interest = Interest(
+                    interestElement.find_element(By.TAG_NAME, "h3").text.strip()
+                )
+                self.add_interest(interest)
+        except:
+            pass
+
+    def get_accomplishments(self):
+        try:
+            _ = WebDriverWait(self.driver, self.__WAIT_FOR_ELEMENT_TIMEOUT).until(
+                EC.presence_of_element_located(
+                    (
+                        By.XPATH,
+                        "//*[@class='pv-profile-section pv-accomplishments-section artdeco-container-card artdeco-card ember-view']",
+                    )
+                )
+            )
+            acc = self.driver.find_element(By.XPATH,
+                "//*[@class='pv-profile-section pv-accomplishments-section artdeco-container-card artdeco-card ember-view']"
+            )
+            for block in acc.find_elements(By.XPATH,
+                "//div[@class='pv-accomplishments-block__content break-words']"
+            ):
+                category = block.find_element(By.TAG_NAME, "h3")
+                for title in block.find_element(By.TAG_NAME,
+                    "ul"
+                ).find_elements(By.TAG_NAME, "li"):
+                    accomplishment = Accomplishment(category.text, title.text)
+                    self.add_accomplishment(accomplishment)
+        except:
+            pass
+
+    def get_contacts(self):
+        try:
+            self.driver.get("https://www.linkedin.com/mynetwork/invite-connect/connections/")
+            _ = WebDriverWait(self.driver, self.__WAIT_FOR_ELEMENT_TIMEOUT).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "mn-connections"))
+            )
+            connections = self.driver.find_element(By.CLASS_NAME, "mn-connections")
+            if connections is not None:
+                for conn in connections.find_elements(By.CLASS_NAME, "mn-connection-card"):
+                    anchor = conn.find_element(By.CLASS_NAME, "mn-connection-card__link")
+                    url = anchor.get_attribute("href")
+                    name = conn.find_element(By.CLASS_NAME, "mn-connection-card__details").find_element(By.CLASS_NAME, "mn-connection-card__name").text.strip()
+                    occupation = conn.find_element(By.CLASS_NAME, "mn-connection-card__details").find_element(By.CLASS_NAME, "mn-connection-card__occupation").text.strip()
+
+                    contact = Contact(name=name, occupation=occupation, url=url)
+                    self.add_contact(contact)
+        except:
+            connections = None
+
 
     def scrape_logged_in(self, close_on_complete=True):
         driver = self.driver
@@ -357,75 +443,17 @@ class Person(Scraper):
 
         self.get_educations()
 
-        driver.get(self.linkedin_url)
+        if driver.current_url != self.linkedin_url:
+            driver.get(self.linkedin_url)
 
-        # Solo obtener intereses, logros y contactos si extra_info está activado
-        if getattr(self, 'interests', None) is not False:
-            try:
-                _ = WebDriverWait(driver, self.__WAIT_FOR_ELEMENT_TIMEOUT).until(
-                    EC.presence_of_element_located(
-                        (
-                            By.XPATH,
-                            "//*[@class='pv-profile-section pv-interests-section artdeco-container-card artdeco-card ember-view']",
-                        )
-                    )
-                )
-                interestContainer = driver.find_element(By.XPATH,
-                    "//*[@class='pv-profile-section pv-interests-section artdeco-container-card artdeco-card ember-view']"
-                )
-                for interestElement in interestContainer.find_elements(By.XPATH,
-                    "//*[@class='pv-interest-entity pv-profile-section__card-item ember-view']"
-                ):
-                    interest = Interest(
-                        interestElement.find_element(By.TAG_NAME, "h3").text.strip()
-                    )
-                    self.add_interest(interest)
-            except:
-                pass
+        if self.extra_info:
+            self.get_interests()
 
-        if getattr(self, 'accomplishments', None) is not False:
-            try:
-                _ = WebDriverWait(driver, self.__WAIT_FOR_ELEMENT_TIMEOUT).until(
-                    EC.presence_of_element_located(
-                        (
-                            By.XPATH,
-                            "//*[@class='pv-profile-section pv-accomplishments-section artdeco-container-card artdeco-card ember-view']",
-                        )
-                    )
-                )
-                acc = driver.find_element(By.XPATH,
-                    "//*[@class='pv-profile-section pv-accomplishments-section artdeco-container-card artdeco-card ember-view']"
-                )
-                for block in acc.find_elements(By.XPATH,
-                    "//div[@class='pv-accomplishments-block__content break-words']"
-                ):
-                    category = block.find_element(By.TAG_NAME, "h3")
-                    for title in block.find_element(By.TAG_NAME,
-                        "ul"
-                    ).find_elements(By.TAG_NAME, "li"):
-                        accomplishment = Accomplishment(category.text, title.text)
-                        self.add_accomplishment(accomplishment)
-            except:
-                pass
+        if self.extra_info:
+            self.get_accomplishments()
 
-        if getattr(self, 'contacts', None) is not False:
-            try:
-                driver.get("https://www.linkedin.com/mynetwork/invite-connect/connections/")
-                _ = WebDriverWait(driver, self.__WAIT_FOR_ELEMENT_TIMEOUT).until(
-                    EC.presence_of_element_located((By.CLASS_NAME, "mn-connections"))
-                )
-                connections = driver.find_element(By.CLASS_NAME, "mn-connections")
-                if connections is not None:
-                    for conn in connections.find_elements(By.CLASS_NAME, "mn-connection-card"):
-                        anchor = conn.find_element(By.CLASS_NAME, "mn-connection-card__link")
-                        url = anchor.get_attribute("href")
-                        name = conn.find_element(By.CLASS_NAME, "mn-connection-card__details").find_element(By.CLASS_NAME, "mn-connection-card__name").text.strip()
-                        occupation = conn.find_element(By.CLASS_NAME, "mn-connection-card__details").find_element(By.CLASS_NAME, "mn-connection-card__occupation").text.strip()
-
-                        contact = Contact(name=name, occupation=occupation, url=url)
-                        self.add_contact(contact)
-            except:
-                connections = None
+        if self.extra_info:
+            self.get_contacts()
 
         if close_on_complete:
             driver.quit()

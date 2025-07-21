@@ -10,8 +10,6 @@ CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH")
 service = Service(executable_path=CHROMEDRIVER_PATH)
 driver = webdriver.Chrome(service=service)
 
-# Usar email y password del .env, la cookie se gestiona automáticamente
-
 email = os.getenv("LINKEDIN_USER")
 password = os.getenv("LINKEDIN_PASSWORD")
 profile_url = "https://www.linkedin.com/in/nicolas-aravena-cancino/"

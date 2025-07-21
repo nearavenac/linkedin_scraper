@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional, Dict
 from time import sleep
 
 from selenium.webdriver import Chrome
@@ -32,8 +33,8 @@ class Institution:
 
 @dataclass
 class Experience(Institution):
-    from_date: str = None
-    to_date: str = None
+    from_date: Optional[Dict[str, Optional[int]]] = None
+    to_date: Optional[Dict[str, Optional[int]]] = None
     description: str = None
     position_title: str = None
     duration: str = None
@@ -42,8 +43,8 @@ class Experience(Institution):
 
 @dataclass
 class Education(Institution):
-    from_date: str = None
-    to_date: str = None
+    from_date: Optional[Dict[str, Optional[int]]] = None
+    to_date: Optional[Dict[str, Optional[int]]] = None
     description: str = None
     degree: str = None
 
