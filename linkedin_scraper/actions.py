@@ -1,10 +1,12 @@
 import getpass
+import time
+import json
+import os
 from . import constants as const
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-import json
-import os
 
 def __prompt_email_password():
   u = input("Email: ")
@@ -29,19 +31,31 @@ def _save_cookie_for_user(email, cookie):
     with open(cookies_path, 'w') as f:
         json.dump(cookies, f)
 
+def _delete_cookie_for_user(email):
+    cookies_path = os.path.join(os.path.dirname(__file__), '..', 'cookies.json')
+    if os.path.exists(cookies_path):
+        with open(cookies_path, 'r') as f:
+            cookies = json.load(f)
+        if email in cookies:
+            del cookies[email]
+            with open(cookies_path, 'w') as f:
+                json.dump(cookies, f)
+
 def page_has_loaded(driver):
     page_state = driver.execute_script('return document.readyState;')
     return page_state == 'complete'
 
-def login(driver, email=None, password=None, timeout=10, redirect_url=None):
-    # Intentar obtener cookie almacenada para el usuario
-    cookie = None
-    if email:
-        cookie = _get_cookie_for_user(email)
-    if cookie:
-        if _login_with_cookie(driver, cookie, redirect_url=redirect_url):
-            # Verificar si el login fue exitoso
-            return True
+def login(driver, email=None, password=None, timeout=10, redirect_url=None, force_refresh=False):
+    if not force_refresh:
+        cookie = None
+        if email:
+            cookie = _get_cookie_for_user(email)
+        if cookie:
+            if _login_with_cookie(driver, cookie, redirect_url=redirect_url):
+                return True
+            else:
+                _delete_cookie_for_user(email)
+        
     # Si no hay cookie válida, pedir credenciales
     if not email or not password:
         email, password = __prompt_email_password()
@@ -77,7 +91,7 @@ def _login_with_cookie(driver, cookie, redirect_url=None):
         "value": cookie,
         "domain": ".linkedin.com"
     })
-    # Redirigir a la URL deseada si se especifica
+    
     if redirect_url:
         driver.get(redirect_url)
     else:

@@ -19,6 +19,18 @@ def get_driver():
     service = Service(executable_path=CHROMEDRIVER_PATH)
     return webdriver.Chrome(service=service, options=chrome_options)
 
+@app.get("/refresh_linkedin_cookie")
+def refresh_linkedin_cookie():
+    if not CHROMEDRIVER_PATH or not LINKEDIN_USER or not LINKEDIN_PASSWORD:
+        raise HTTPException(status_code=500, detail="Environment variables not configured")
+
+    driver = get_driver()
+    try:
+        actions.login(driver, LINKEDIN_USER, LINKEDIN_PASSWORD, force_refresh=True)
+        return {"ok": True, "msg": "Cookie refreshed"}
+    finally:
+        driver.quit()
+
 @app.get("/scrape_person")
 def scrape_person(profile_url: str = Query(..., description="LinkedIn profile URL")):
     if not CHROMEDRIVER_PATH or not LINKEDIN_USER or not LINKEDIN_PASSWORD:

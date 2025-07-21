@@ -6,8 +6,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException
 from .objects import Experience, Education, Scraper, Interest, Accomplishment, Contact
-from linkedin_scraper import selectors
-from linkedin_scraper import utils
+from linkedin_scraper import selectors, utils
 
 class Person(Scraper):
 
@@ -53,11 +52,11 @@ class Person(Scraper):
                 driver = webdriver.Chrome(driver_path)
             except:
                 driver = webdriver.Chrome()
-
-        if get:
-            driver.get(linkedin_url)
-
+        
         self.driver = driver
+
+        if get and driver.current_url != linkedin_url:
+            driver.get(linkedin_url)
 
         if scrape:
             self.scrape(close_on_complete)
@@ -425,7 +424,7 @@ class Person(Scraper):
             )
         )
         self.focus()
-        self.wait(5)
+        self.wait(1)
 
         self.get_name_and_location()
 
@@ -443,17 +442,16 @@ class Person(Scraper):
 
         self.get_educations()
 
-        if driver.current_url != self.linkedin_url:
-            driver.get(self.linkedin_url)
+        if self.extra_info:
+            self.get_contacts()
 
         if self.extra_info:
+            if driver.current_url != self.linkedin_url:
+                driver.get(self.linkedin_url)
             self.get_interests()
 
         if self.extra_info:
             self.get_accomplishments()
-
-        if self.extra_info:
-            self.get_contacts()
 
         if close_on_complete:
             driver.quit()
